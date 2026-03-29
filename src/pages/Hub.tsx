@@ -1,12 +1,12 @@
 import { getHubLocation } from '@/backend/fetchHubLocation';
+import { calculateDistance } from '@/utils/distance';
 import { febLocationFieldMap, mapFields } from '@/utils/mapper';
 import { motion } from 'framer-motion';
 import L from 'leaflet';
 import { ArrowLeft, ChevronRight, MapPin, Wifi, Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { CircleMarker, MapContainer, Marker, Popup, TileLayer } from 'react-leaflet';
+import { CircleMarker, MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
 import { useNavigate } from 'react-router-dom';
-import { calculateDistance } from '@/utils/distance';
 
 type HubProps = {
   userLocation: { lat: number; lng: number } | null;
@@ -27,8 +27,17 @@ type Hub = {
   wifi: boolean
 };
 
+const RecenterMap = ({ center }: { center: { lat: number; lng: number } }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (center) map.flyTo([center.lat, center.lng], 13);
+  }, [center, map]);
+  return null;
+};
+
 const Hub = ({ userLocation }: HubProps) => {
-  const [center, setCenter] = useState({ lat: 16.8409, lng: 96.1735 });
+  console.log("userLocation", userLocation)
+  const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
   const [hubs, setHubs] = useState<Hub[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
@@ -36,7 +45,6 @@ const Hub = ({ userLocation }: HubProps) => {
 
   // Update center if userLocation is available
   useEffect(() => {
-
     if (userLocation) setCenter(userLocation);
     console.log("center", center)
   }, [userLocation]);
@@ -51,12 +59,9 @@ const Hub = ({ userLocation }: HubProps) => {
         const locations = results.map((r: any) => {
           const hub = mapFields(r, febLocationFieldMap);
           console.log("hub", hub);
-          const distance = calculateDistance(
-            center.lat,
-            center.lng,
-            hub.latitude,
-            hub.longitude
-          );
+          const distance = center
+            ? calculateDistance(center.lat, center.lng, hub.latitude, hub.longitude)
+            : 0;
           return {
             ...hub,
             distance
@@ -96,39 +101,43 @@ const Hub = ({ userLocation }: HubProps) => {
 
       {/* Map */}
       <div className="relative h-[200px]">
-        <MapContainer center={center} zoom={13} className="w-full h-full">
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            maxZoom={19}
+        {center ? (
+          <MapContainer center={center} zoom={13} className="w-full h-full">
+            <TileLayer
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              maxZoom={19}
+            />
 
-          />
+            {/* Recenter helper */}
+            <RecenterMap center={center} />
 
-          {/* User Location */}
-          {userLocation && (
+            {/* User location */}
             <CircleMarker
-              center={userLocation}
+              center={center}
               radius={8}
               pathOptions={{ color: '#4285F4', fillColor: '#4285F4', fillOpacity: 1 }}
             />
-          )}
 
-          {/* Hub Markers */}
-
-          {hubs.map((hub) => (
-            <Marker
-              key={hub.id}
-              position={{ lat: hub.latitude, lng: hub.longitude }}
-              icon={createCustomIcon('#059669')}
-            >
-              <Popup>
-                <strong>{hub.name}</strong>
-                <br />
-                <strong>{hub.address}</strong><br />
-                Power: {hub.power} | Distance: {hub.distance.toFixed(1)} km
-              </Popup>
-            </Marker>
-          ))}
-        </MapContainer>
+            {/* Hub markers */}
+            {hubs.map(hub => (
+              <Marker
+                key={hub.id}
+                position={{ lat: hub.latitude, lng: hub.longitude }}
+                icon={createCustomIcon('#059669')}
+              >
+                <Popup>
+                  <strong>{hub.name}</strong><br />
+                  <strong>{hub.address}</strong><br />
+                  Power: {hub.power} | Distance: {hub.distance.toFixed(1)} km
+                </Popup>
+              </Marker>
+            ))}
+          </MapContainer>
+        ) : (
+          <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+            Waiting for location…
+          </div>
+        )}
       </div>
 
       {/* Bottom Sheet / Hub List */}
@@ -156,7 +165,7 @@ const Hub = ({ userLocation }: HubProps) => {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.1 }}
                 key={hub.id}
-                onClick={() => { navigate(`/hubs/${hub.id}`, { state: { hub } });}}
+                onClick={() => { navigate(`/hubs/${hub.id}`, { state: { hub } }); }}
                 className="w-full glass-card p-3 rounded-3xl flex items-center gap-3 text-left transition-all active:scale-[0.98]"
               >
                 <div className="w-9 h-9 bg-primary/10 rounded-xl flex items-center justify-center shrink-0">
